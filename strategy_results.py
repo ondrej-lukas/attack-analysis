@@ -98,8 +98,12 @@ tmp2 = tmp.filter(tmp.timestamp < tmp.timestamp_PROD)
 res = tmp2.groupBy(tmp.DstAddr,tmp.Dport,tmp.day).count()
 
 #find out how many Honeypots we used in each day
-df_HP_counts = df_HP.groupBy(df_HP.day).count().alias("HP_count")
-results_per_day = res.groupBy(res.day).agg(F.sum('count').alias('saved_count')).join(df_counts,['day']).select('saved_count', "HP_count").collect()
+df_HP_counts = df_HP.groupBy(df_HP.day).count().alias("HP_count").selectExpr('day as day', "count as HP_count")
+#get number of saved hosts per day
+df_saved = res.groupBy(res.day).agg(F.sum('count').alias('saved_count')).select("day","saved_count")
+#join results
+results_per_day = df_saved.join(df_HP_counts,df_saved.day==df_HP_counts.day)
+#print results_per_day
 print("Results:")
-for row in results_per_day:
-	print(row['count'], row['HP_count'])	
+for row in results_per_day.collect():
+	print(row['saved_count'], row['HP_count'])
