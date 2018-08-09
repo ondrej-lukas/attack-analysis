@@ -1,0 +1,18 @@
+reset;
+model /home/kori/data/projects/tacr/src/MDP-game/mix.mod;
+#data /home/kori/data/projects/tacr/src/MDP-game/mix.dat;
+data /home/kori/data/projects/tacr/src/MDP-game/mix_long.dat;
+#set R := 0 .. 1 by 0.05; # iterate over different rationalities
+set R := 1 .. 7 by 0.5; # iterate over different allows maximal number of ports 
+for {i in R} {
+	let L := i;
+	#let rat := i;
+	solve;
+	display h;
+	display u;
+	display rat;
+	display tot;
+	display rat;
+}
+#display tot;
+#display L;
