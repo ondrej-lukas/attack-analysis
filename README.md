@@ -1,5 +1,7 @@
 # Collection of scripts used for analysing netflows in Hadoop
 Used for estimating efficiency of strategy of distributing honeypots in the network.
+## Game Description
+TODO
 ## Usage:
 ### Running scripts:
 ```bash
