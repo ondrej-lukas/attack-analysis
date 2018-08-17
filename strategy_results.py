@@ -8,51 +8,62 @@ import pyspark.sql.types as T
 import re
 from pyspark.sql.window import Window
 import random
-import csv
 
 
 conf = SparkConf().setAppName("pyspark")
 sc = SparkContext(conf=conf)
 sqlContext = HiveContext(sc)
 
-
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#################################################################
+#EXPERIMENT SETUP:
+## STRATEGY
 #load strategy
+probabilities = {21:0.263346, 22:0.248634,23:0.959599, 25:0.6516, 80:0.5, 81:0.161263, 443: 0.68306, 445: 0.863388, 1433: 0.371651, 2000:0.200172, 3306: 0.2762, 3389: 0.928962, 5900:0.131671, 8000: 0.16186, 8080: 0.598594}
 
-probabilities = {21:0.263346, 22:0.248634,23:0.959599, 25:0.6516, 80:0.5, 81:0.161263, 443: 0.68306, 445: 0.863388, 1433: 0.371651, 2000:0.200172, 3306: 0.2762, 3389: 0.928962, 5900: 0.131671, 8000: 0.16186, 8080: 0.598594}
-"""
-#CZNIC STRATEGY
-probabilities = {23:1, 2323:1, 22:1, 80:1, 8080:1, 8023:1, 2380:1}
-"""
+#cznic honeypots
+#probabilities = {23:1, 2323:1, 22:1, 80:1, 8080:1, 8023:1, 2380:1}
 
-def find_port_class(d_port, state):
+##INPUT
+input_file="CTU-Flows_main/Flows.parquet/_yyyymd=2017-*-*"
+
+##OUTPUT FILENAME
+#format [strategy]_[year]_results.parquet
+output_file = "mixed_2018_results.parquet"
+###################################################################
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+def find_HP_candidates(d_port, state):
 	if re.match( r'.*_.*S.*A', state):
-		return "production"
+		return False
 	else:
-		return "possible_HP"
-
+		return True
 
 #function which decides where to put honeypots
-def place_honeypots(d_port, port_class,count,total_count,probabilities=probabilities):
+def place_honeypots(d_port, possible_HP,count,total_count):
+	global probabilities
 	#is the flow open
-	if port_class == "possible_HP" and d_port in probabilities.keys():
+	if possible_HP and d_port in probabilities.keys():
 		# count the ratioon of free ports
-		print("OK")
 		r = count/total_count
 		if r <= probabilities[d_port]:
 			return True
 		else:
 			#roll the dice
-			if random.uniform(0,1) < probabilities[d_port]:
+			if random.uniform(0,1) < probabilities[d_port]/r:
 				return True
 	return False
+
 #register functions for spark
 place_honeypots_udf = F.udf(place_honeypots,T.BooleanType())
-find_port_class_udf = F.udf(find_port_class,T.StringType())
+find_honeypots_candidates_udf = F.udf(find_HP_candidates,T.BooleanType())
 
 #filter vic jak 5 adres nebo vic jak 3 porty na jdne IP
 
 #get data
-data = sqlContext.read.parquet("CTU-Flows_main/Flows.parquet/_yyyymd=2018-3-7")
+data = sqlContext.read.parquet(input_file)
 
 #filter flows with dstIP outside of the university and srcIP inside range 80-83 mask 22
 df = data.filter(data.Proto=="tcp").filter(data.DstAddr.startswith("147.32.")).filter(~data.SrcAddr.startswith("147.32.")).select("DstAddr", "Dport", "State", "StartTime", "SrcAddr")
@@ -71,13 +82,13 @@ srcAddrs = df.select('SrcAddr','DstAddr','Dport','day').distinct().groupBy('SrcA
 df = df.join(srcAddrs, ['SrcAddr','day'], 'leftsemi')
 
 #create df with openPorts
-df = df.withColumn("portClass",find_port_class_udf(df["Dport"],df["State"])).select("DstAddr", "Dport", "State", "timestamp", "portClass","day", "SrcAddr").distinct()
+df = df.withColumn("possible_HP",find_honeypots_candidates_udf(df["Dport"],df["State"])).select("DstAddr", "Dport", "State", "timestamp", "possible_HP","day", "SrcAddr").distinct()
 #count production ports in each port number and total 
-df_counts = df.select("DstAddr", "Dport", "day","portClass").distinct().groupBy("Dport","portClass", "day").count().join(df.select("DstAddr", "Dport", "day","portClass").distinct().groupBy("Dport","day").count().selectExpr("Dport as Dport", "day as day","count as total"),["Dport","Day"],how="right")
-df =  df.join(df_counts, ["Dport","day","portClass"],how="left")
+df_counts = df.select("DstAddr", "Dport", "day","possible_HP").distinct().groupBy("Dport","possible_HP", "day").count().join(df.select("DstAddr", "Dport", "day","possible_HP").distinct().groupBy("Dport","day").count().selectExpr("Dport as Dport", "day as day","count as total"),["Dport","Day"],how="right")
+df =  df.join(df_counts, ["Dport","day","possible_HP"],how="left")
 
 #place Honeypots
-df_with_HP = df.withColumn("isHP", place_honeypots_udf(df["Dport"], df["portClass"],df["count"],df["total"])).select("DstAddr", "Dport", "State", "timestamp", "isHP", "portClass","day", "SrcAddr").distinct()
+df_with_HP = df.withColumn("isHP", place_honeypots_udf(df["Dport"], df["possible_HP"],df["count"],df["total"])).select("DstAddr", "Dport", "State", "timestamp", "isHP", "possible_HP","day", "SrcAddr").distinct()
 
 #filter out flows without honeypots
 df_HP = df_with_HP.filter(df_with_HP.isHP).select("DstAddr", "Dport", "State", "timestamp", "isHP","day", "SrcAddr").orderBy("SrcAddr")
@@ -88,7 +99,7 @@ df_HP1 = df_HP.withColumn('minTime', F.min(F.col('timestamp')).over(window))
 df_HP = df_HP1.filter(df_HP1.timestamp==df_HP1.minTime).select("DstAddr", "Dport",'timestamp',"day", "SrcAddr").distinct()
 
 #get open ports (those we might save with honeypots)
-df_open_ports = df_with_HP.filter(df_with_HP['portClass']=="production").select("timestamp","day","SrcAddr", "Dport", "State")
+df_open_ports = df_with_HP.filter(~df_with_HP["possible_HP"]).select("timestamp","day","SrcAddr", "Dport", "State")
 
 #join tables
 tmp = df_HP.join(df_open_ports.selectExpr("timestamp as timestamp_PROD", "day as day", "SrcAddr as SrcAddr"),['SrcAddr','day'])
@@ -102,8 +113,7 @@ df_HP_counts = df_HP.groupBy(df_HP.day).count().alias("HP_count").selectExpr('da
 #get number of saved hosts per day
 df_saved = res.groupBy(res.day).agg(F.sum('count').alias('saved_count')).select("day","saved_count")
 #join results
-results_per_day = df_saved.join(df_HP_counts,df_saved.day==df_HP_counts.day)
+results_per_day = df_saved.join(df_HP_counts,['day']).select("day","saved_count", "HP_count")
 #print results_per_day
-print("Results:")
-for row in results_per_day.collect():
-	print(row['saved_count'], row['HP_count'])
+results_per_day.write.parquet(output_file)
+print("DONE")
