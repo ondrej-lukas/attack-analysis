@@ -28,6 +28,10 @@ parser.add_argument('--solver', '-s', default='/home/kori/data/prg/ampl/amplide.
                     help='Solver that should be used to solve the non-linear problem.')
 parser.add_argument('--ampl', '-a', default='/home/kori/data/prg/ampl/amplide.linux64',
                     help='Path to AMPL.')
+parser.add_argument('--oneline', action='store_true',
+                    help='Prints json in one line.')
+parser.add_argument('--perday', action='store_true',
+                    help='Prints one json per day.')
 
 
 
@@ -66,14 +70,26 @@ def main():
             for hp in var_honeypots:
                 output = compute_defense(stg, dist, num_of_hp=hp, rationality=rat)
                 outputs.append(output)
+        
+        if args.perday:
+            formatedPrint(outputs[0])
+            
         fulloutput['data'].update({date:outputs})
         # print('\n*****')
 
-    pprint(fulloutput)
+    if not args.perday:
+        formatedPrint(fulloutput)
     # Write filtered TODOs to file.
         # with open("filtered_data_file.json", "w") as data_file:
         #     filtered_todos = list(filter(keep, todos))
         #     json.dump(filtered_todos, data_file, indent=2)    
+    
+
+def formatedPrint(instr):
+    if args.oneline:
+        print(json.dumps(instr))
+    else:
+        pprint(instr)
     
 
 @contextmanager
@@ -88,6 +104,13 @@ def suppress_stdout():
 
 
 
+def getRelPorts(att_stg, prod_dist, num=0):
+    att_stg_sorted = sorted(att_stg.items(), key=lambda kv: kv[1])
+    prod_dist_sorted = sorted(prod_dist.items(), key=lambda kv: kv[1])
+    if num==0:
+        return list(set().union([x[0] for x in att_stg_sorted], [x[0] for x in att_stg_sorted]))
+    else:
+        return list(set().union([x[0] for x in att_stg_sorted[-num:]], [x[0] for x in att_stg_sorted[-num:]]))
 
 def getAllPorts(att_stg, prod_dist):
     return list(set().union(att_stg.keys(), prod_dist.keys()))
@@ -95,11 +118,16 @@ def getAllPorts(att_stg, prod_dist):
 def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationality=args.fix_rationality):
     # production ports and attacker's strategy
     df = DataFrame('P')
-    df.setColumn('P', list(att_stg.keys()))
+    ports = getRelPorts(att_stg, prod_dist, num=25)
+    df.setColumn('P', list(ports))
     
-    ports = getAllPorts(att_stg, prod_dist)
+    #ports = getAllPorts(att_stg, prod_dist)
+    #print(('Considered ports are: ', ports))
     att = [att_stg.get(x, 0) for x in ports]
     prod = [prod_dist.get(x, 0) for x in ports]
+    #print(('Attack ports: ', att, len(att)))
+    #print(('Dist ports: ', prod, len(prod)))
+
     df.addColumn('s', prod)
     df.addColumn('p', att)
     
@@ -113,6 +141,7 @@ def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationalit
     ampl.setData(df, 'P')
     ampl.eval('let L :=  {}; let rat := {};'.format(num_of_hp, rationality))
     
+    #print(df)
     # Solve the model
     with suppress_stdout():
         ampl.solve()
