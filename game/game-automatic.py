@@ -69,14 +69,14 @@ def main():
         for rat in var_rationality:
             for hp in var_honeypots:
                 output = compute_defense(stg, dist, num_of_hp=hp, rationality=rat)
-                output.update({'date':date})
+                output.update({"date":date})
                 outputs.append(output)
         
         if args.perday:
             formatedPrint(outputs[0])
             
-        fulloutput['data'].update({date:outputs})
-        # print('\n*****')
+        fulloutput["data"].update({date:outputs})
+        # print("\n*****')
 
     if not args.perday:
         formatedPrint(fulloutput)
@@ -90,7 +90,7 @@ def formatedPrint(instr):
     if args.oneline:
         print(json.dumps(instr))
     else:
-        pprint(instr)
+        print(json.dumps(instr, sort_keys=True, indent=4))
     
 
 @contextmanager
@@ -117,7 +117,7 @@ def getAllPorts(att_stg, prod_dist):
     return list(set().union(att_stg.keys(), prod_dist.keys()))
     
 def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationality=args.fix_rationality):
-    # production ports and attacker's strategy
+    # production ports and attacker"s strategy
     df = DataFrame('P')
     ports = getRelPorts(att_stg, prod_dist, num=25)
     df.setColumn('P', list(ports))
@@ -146,15 +146,15 @@ def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationalit
     # Solve the model
     with suppress_stdout():
         ampl.solve()
-    reward = ampl.getObjective('reward').value()
+    reward = ampl.getObjective("reward").value()
     
-    hp_stg = ampl.getData('{j in P} h[j]')
+    hp_stg = ampl.getData("{j in P} h[j]")
     ampl.getVariables
     output = dict()
-    output.update({'stg':hp_stg.toDict()})
-    output.update({'reward':reward})
-    output.update({'rationality':rationality})
-    output.update({'num_of_hp':num_of_hp})
+    output.update({"stg":hp_stg.toDict()})
+    output.update({"reward":reward})
+    output.update({"rationality":rationality})
+    output.update({"num_of_hp":num_of_hp})
     
     ampl.close()
     return output
