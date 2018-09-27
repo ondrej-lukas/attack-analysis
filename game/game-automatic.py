@@ -69,6 +69,7 @@ def main():
         for rat in var_rationality:
             for hp in var_honeypots:
                 output = compute_defense(stg, dist, num_of_hp=hp, rationality=rat)
+                output.update({'date':date})
                 outputs.append(output)
         
         if args.perday:
