@@ -18,10 +18,12 @@ parser.add_argument('model',
 parser.add_argument('--fix-rationality', '-r', default=0.2, type=float, 
                     help='Probability value between 0 and 1 describing how rational is the attacker.')
 parser.add_argument('--var-rationality', '-v', type=float, help='Vary the attackers rationality. Value is expected to be between 0 and 1. The algorithm will produce many outputs by iterating from 0 to 1 by the given value')
-parser.add_argument('--fix-honeypots', default=1, type=int, 
+parser.add_argument('--fix-honeypots', default=1, type=float, 
                     help='Number of honeypots that the defender can allocate in each router.')
-parser.add_argument('--var-honeypots', type=int,
+parser.add_argument('--var-honeypots', type=float,
                     help='Algorithm will produce set of strategies by going from 0 to a given number of honeypots.')
+parser.add_argument('--by-honeypots', type=float,
+                    help='In case var-honeypots is chosen, by-honeypots is the increment of honeypot by each iteration (can be float value).')
 parser.add_argument('--output', '-o',
                     help='Filename to save the output json file.')
 parser.add_argument('--solver', '-s', default='/home/kori/data/prg/ampl/amplide.linux64/minos',
@@ -47,15 +49,23 @@ def main():
     var_rationality = list()
 
     if args.var_honeypots is not None:
-        var_honeypots = range(args.var_honeypots+1)
+        if args.by_honeypots is not None:
+            by = args.by_honeypots
+        else:
+            by = 1.
+        var_honeypots = list(np.arange(0, args.var_honeypots+0.0001, by))
+#        var_honeypots = list(range(args.var_honeypots+1))
     else:
         var_honeypots = [args.fix_honeypots]
 
     if args.var_rationality is not None:
         var_rationality = list(np.arange(0, 1.00000001, args.var_rationality))
     else:
-        var_rationality = [args.fix_honeypots]
+        var_rationality = [args.fix_rationality]
 
+#    print(var_rationality)
+#    print(var_honeypots)
+    
     fulloutput = dict()
     fulloutput.update({'data':list()})
 
@@ -71,11 +81,12 @@ def main():
                 output = compute_defense(stg, dist, num_of_hp=hp, rationality=rat)
                 output.update({"date":date})
                 outputs.append(output)
+                #print(output)
         
-        if args.perday:
-            formatedPrint(outputs[0])
+                if args.perday:
+                    formatedPrint(output)
             
-        fulloutput["data"].append(outputs[0])
+                fulloutput["data"].append(output)
         # print("\n*****')
 
     if not args.perday:
@@ -149,12 +160,12 @@ def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationalit
     reward = ampl.getObjective("reward").value()
     
     hp_stg = ampl.getData("{j in P} h[j]")
-    ampl.getVariables
     output = dict()
     output.update({"stg":hp_stg.toDict()})
     output.update({"reward":reward})
     output.update({"rationality":rationality})
     output.update({"num_of_hp":num_of_hp})
+    output.update({"used_hps":ampl.getData("tot").toDict().popitem()[1]})
     
     ampl.close()
     return output
