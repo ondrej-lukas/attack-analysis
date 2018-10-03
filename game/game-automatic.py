@@ -57,7 +57,7 @@ def main():
         var_rationality = [args.fix_honeypots]
 
     fulloutput = dict()
-    fulloutput.update({'data':dict()})
+    fulloutput.update({'data':list()})
 
 
     for date in data.get("data"):
@@ -75,7 +75,7 @@ def main():
         if args.perday:
             formatedPrint(outputs[0])
             
-        fulloutput["data"].update({date:outputs})
+        fulloutput["data"].append(outputs[0])
         # print("\n*****')
 
     if not args.perday:
