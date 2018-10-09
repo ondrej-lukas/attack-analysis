@@ -161,7 +161,12 @@ def compute_defense(att_stg, prod_dist, num_of_hp=args.fix_honeypots, rationalit
     
     hp_stg = ampl.getData("{j in P} h[j]")
     output = dict()
-    output.update({"stg":hp_stg.toDict()})
+    stg_json = list()
+    for k,v in hp_stg.toDict().items():
+        stg_json.append({"port":int(k), "prob":v})
+    
+    
+    output.update({"stg":stg_json})
     output.update({"reward":reward})
     output.update({"rationality":rationality})
     output.update({"num_of_hp":num_of_hp})
